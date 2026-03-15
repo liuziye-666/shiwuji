@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>拾物集 - 轻量级物品管理</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <style>
+    /* ========== 基础变量与重置 ========== */
+    :root {
+      --bg: #f5f3ef;
+      --card: #fffef9;
+      --accent: #7a9e7e;
+      --accent-light: #a8c5ab;
+      --text: #3d3d3d;
+      --text-muted: #6b6b6b;
+      --danger: #c75c5c;
+      --border: #e5e2dc;
+      --shadow: 0 2px 8px rgba(0,0,0,0.06);
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    /* ========== 布局容器 ========== */
+    .app-header {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
+      color: #fff;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow);
+    }
+    .app-header h1 { font-size: 1.35rem; font-weight: 600; }
+    .app-header nav {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .app-header nav a {
+      color: rgba(255,255,255,0.95);
+      text-decoration: none;
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      transition: background 0.2s;
+    }
+    .app-header nav a:hover { background: rgba(255,255,255,0.2); }
+
+    .main-content {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      min-height: calc(100vh - 60px);
+    }
+
+    /* ========== 视图切换 ========== */
+    .view { display: none; animation: fadeIn 0.3s ease; }
+    .view.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ========== 通用组件 ========== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.6rem 1rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+      text-decoration: none;
+      color: inherit;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--border); color: var(--text); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      margin-bottom: 1rem;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--border);
+    }
+    .card-title { font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--text); }
+    .text-danger { color: var(--danger); font-weight: 500; }
+    .toast {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      color: #fff;
+      z-index: 1000;
+      opacity: 0;
+      transition: transform 0.3s, opacity 0.3s;
+    }
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+    .toast.success { background: var(--accent); }
+    .toast.error { background: var(--danger); }
+
+    /* ========== 首页仪表盘 ========== */
+    .quick-entries {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .quick-entry {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.25rem;
+      background: var(--card);
+      border-radius: var(--radius);
+      text-decoration: none;
+      color: var(--text);
+      border: 1px solid var(--border);
+      transition: all 0.2s;
+    }
+    .quick-entry:hover { border-color: var(--accent); color: var(--accent); }
+    .quick-entry i { font-size: 1.8rem; margin-bottom: 0.5rem; color: var(--accent); }
+    .quick-entry span { font-size: 0.9rem; }
+
+    .expiring-list { list-style: none; }
+    .expiring-list li {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .expiring-list li:last-child { border-bottom: none; }
+    .expiring-list li:hover { background: rgba(122,158,126,0.08); }
+    .expiring-list .days { font-weight: 600; }
+    .expiring-list .days.overdue { color: var(--danger); }
+
+    .room-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .room-stat {
+      background: linear-gradient(135deg, var(--accent-light) 0%, rgba(168,197,171,0.4) 100%);
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+    .room-stat span { font-weight: 600; color: var(--text); }
+
+    /* ========== 物品建档表单 ========== */
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.35rem; font-size: 0.9rem; color: var(--text-muted); }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%;
+      padding: 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      background: #fff;
+    }
+    .form-group textarea { min-height: 80px; resize: vertical; }
+    .image-preview {
+      max-width: 200px;
+      max-height: 150px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      margin-top: 0.5rem;
+      object-fit: cover;
+    }
+    .qr-result {
+      margin-top: 1rem;
+      text-align: center;
+      padding: 1rem;
+      background: #fff;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+    .qr-result img { max-width: 180px; height: auto; }
+    .qr-result .download-btn { margin-top: 0.75rem; }
+
+    /* ========== 扫码页 ========== */
+    .scan-area {
+      position: relative;
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto 1rem;
+      background: #000;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .scan-area video {
+      width: 100%;
+      display: block;
+    }
+    .scan-area canvas { display: none; }
+    .manual-id-input { display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap; }
+    .manual-id-input input { flex: 1; min-width: 200px; }
+
+    /* ========== 物品详情 ========== */
+    .detail-photo {
+      width: 100%;
+      max-height: 240px;
+      object-fit: contain;
+      border-radius: var(--radius);
+      background: var(--border);
+      margin-bottom: 1rem;
+    }
+    .detail-row { margin-bottom: 0.75rem; }
+    .detail-row strong { display: inline-block; min-width: 5em; color: var(--text-muted); }
+    .detail-actions { display: flex; gap: 0.75rem; margin-top: 1.25rem; }
+
+    /* ========== 收纳规划 ========== */
+    .storage-layout { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .room-sidebar {
+      flex: 0 0 200px;
+      background: var(--card);
+      border-radius: var(--radius);
+      padding: 1rem;
+      border: 1px solid var(--border);
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .room-sidebar ul { list-style: none; }
+    .room-sidebar li {
+      padding: 0.5rem 0.75rem;
+      margin-bottom: 0.25rem;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .room-sidebar li:hover { background: rgba(122,158,126,0.12); }
+    .room-sidebar li.active { background: var(--accent-light); color: #fff; }
+    .room-sidebar li .btn-delete-room {
+      background: none; border: none; cursor: pointer; padding: 0.2rem; color: inherit; opacity: 0.8;
+    }
+    .room-sidebar li .btn-delete-room:hover { opacity: 1; color: var(--danger); }
+    .room-sidebar .room-actions { margin-top: 0.75rem; }
+    .room-sidebar .room-actions button { margin-right: 0.5rem; margin-bottom: 0.5rem; }
+
+    .grid-container {
+      flex: 1;
+      min-width: 280px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 0.75rem;
+      align-content: start;
+    }
+    .grid-cell {
+      background: var(--card);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      min-height: 100px;
+      padding: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .grid-cell:hover { border-color: var(--accent-light); }
+    .grid-cell .area-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.35rem; }
+    .grid-cell .area-items { font-size: 0.8rem; color: var(--text-muted); }
+
+    /* ========== 物品列表/搜索 ========== */
+    .filter-bar { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .filter-bar input, .filter-bar select { padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); }
+    .item-list { list-style: none; }
+    .item-list li {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.75rem;
+      background: var(--card);
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .item-list li:hover { background: rgba(122,158,126,0.08); }
+    .item-list .item-thumb {
+      width: 48px; height: 48px;
+      border-radius: 8px;
+      object-fit: cover;
+      background: var(--border);
+    }
+    .item-list .item-info { flex: 1; }
+    .item-list .item-name { font-weight: 600; }
+    .item-list .item-meta { font-size: 0.85rem; color: var(--text-muted); }
+
+    /* ========== 响应式 ========== */
+    @media (max-width: 600px) {
+      .app-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
+      .main-content { padding: 1rem; }
+      .storage-layout { flex-direction: column; }
+      .room-sidebar { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <h1><i class="fas fa-box-open"></i> 拾物集</h1>
+    <nav>
+      <a href="#home"><i class="fas fa-home"></i> 首页</a>
+      <a href="#register"><i class="fas fa-plus-circle"></i> 物品建档</a>
+      <a href="#scan"><i class="fas fa-qrcode"></i> 扫码溯源</a>
+      <a href="#storage"><i class="fas fa-th-large"></i> 收纳规划</a>
+      <a href="#list"><i class="fas fa-list"></i> 物品列表</a>
+    </nav>
+  </header>
+
+  <main class="main-content">
+    <!-- 1. 首页仪表盘 -->
+    <section id="view-home" class="view">
+      <div class="quick-entries">
+        <a href="#register" class="quick-entry"><i class="fas fa-camera"></i><span>物品建档</span></a>
+        <a href="#scan" class="quick-entry"><i class="fas fa-search"></i><span>扫码溯源</span></a>
+        <a href="#storage" class="quick-entry"><i class="fas fa-th-large"></i><span>收纳规划</span></a>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-clock"></i> 临期提醒（7天内）</div>
+        <ul id="expiring-list" class="expiring-list"></ul>
+        <p id="expiring-empty" style="display:none; color: var(--text-muted); font-size: 0.9rem;">暂无临期物品</p>
+      </div>
+      <div class="card">
+        <div class="card-title"><i class="fas fa-door-open"></i> 收纳概览</div>
+        <div id="room-stats" class="room-stats"></div>
+      </div>
+    </section>
+
+    <!-- 2. 物品建档 -->
+    <section id="view-register" class="view">
+      <div class="card">
+        <div class="card-title">物品建档</div>
+        <form id="form-register">
+          <div class="form-group">
+            <label>物品名称 *</label>
+            <input type="text" name="name" required placeholder="如：微波炉">
+          </div>
+          <div class="form-group">
+            <label>购买日期</label>
+            <input type="date" name="purchaseDate">
+          </div>
+          <div class="form-group">
+            <label>保质期/有效期（可选）</label>
+            <input type="date" name="expiryDate" placeholder="选填">
+          </div>
+          <div class="form-group">
+            <label>存放位置（房间）</label>
+            <select name="location" id="register-location">
+              <option value="">请选择或下方自定义</option>
+            </select>
+            <input type="text" name="locationCustom" placeholder="或输入新房间名" style="margin-top: 0.35rem;">
+          </div>
+          <div class="form-group">
+            <label>收纳区域（可选）</label>
+            <input type="text" name="roomArea" placeholder="如：厨电区、衣物区">
+          </div>
+          <div class="form-group">
+            <label>备注</label>
+            <textarea name="note" placeholder="品牌、规格等"></textarea>
+          </div>
+          <div class="form-group">
+            <label>照片（拍照或上传）</label>
+            <input type="file" id="photo-input" accept="image/*" capture="environment">
+            <img id="photo-preview" class="image-preview" alt="预览" style="display:none;">
+          </div>
+          <button type="submit" class="btn btn-primary" id="btn-register-submit"><i class="fas fa-save"></i> 保存并生成二维码</button>
+        </form>
+        <div id="qr-result" class="qr-result" style="display:none;">
+          <p style="margin-bottom: 0.5rem;">二维码已生成，可打印贴在物品上</p>
+          <img id="qr-image" alt="二维码">
+          <div class="download-btn">
+            <a id="qr-download" class="btn btn-secondary" download="qrcode.png"><i class="fas fa-download"></i> 下载二维码</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 扫码溯源 -->
+    <section id="view-scan" class="view">
+      <div class="card">
+        <div class="card-title">扫码溯源</div>
+        <div class="scan-area" id="scan-area">
+          <video id="scan-video" playsinline></video>
+          <canvas id="scan-canvas"></canvas>
+        </div>
+        <p style="text-align:center; color: var(--text-muted); font-size: 0.9rem;">或将摄像头对准物品上的二维码</p>
+        <div class="manual-id-input">
+          <input type="text" id="manual-id" placeholder="手动输入物品ID">
+          <button type="button" class="btn btn-primary" id="btn-lookup"><i class="fas fa-search"></i> 查询</button>
+        </div>
+        <button type="button" class="btn btn-secondary" id="btn-toggle-cam" style="margin-top: 0.75rem;">开启摄像头</button>
+      </div>
+    </section>
+
+    <!-- 4. 物品详情 -->
+    <section id="view-detail" class="view">
+      <div class="card" id="detail-card">
+        <div class="card-title">物品详情</div>
+        <img id="detail-photo" class="detail-photo" alt="物品图" style="display:none;">
+        <div id="detail-body"></div>
+        <div class="detail-actions">
+          <button type="button" class="btn btn-primary" id="btn-edit"><i class="fas fa-edit"></i> 编辑</button>
+          <button type="button" class="btn btn-secondary" id="btn-share-link"><i class="fas fa-link"></i> 复制链接</button>
+          <button type="button" class="btn btn-danger" id="btn-delete"><i class="fas fa-trash"></i> 删除</button>
+          <a href="#scan" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> 返回扫码</a>
+        </div>
+      </div>
+      <p id="detail-not-found" style="display:none; color: var(--danger);">未找到该物品。</p>
+    </section>
+
+    <!-- 5. 收纳规划 -->
+    <section id="view-storage" class="view">
+      <div class="card">
+        <div class="card-title">收纳规划</div>
+        <div class="storage-layout">
+          <div class="room-sidebar">
+            <div class="card-title">房间列表</div>
+            <ul id="room-list"></ul>
+            <div class="room-actions">
+              <input type="text" id="new-room-name" placeholder="新房间名" style="width:100%; margin-bottom: 0.5rem; padding: 0.4rem;">
+              <button type="button" class="btn btn-primary" id="btn-add-room"><i class="fas fa-plus"></i> 添加房间</button>
+            </div>
+          </div>
+          <div class="grid-container" id="storage-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. 物品列表/搜索 -->
+    <section id="view-list" class="view">
+      <div class="card">
+        <div class="card-title">物品列表</div>
+        <div class="filter-bar">
+          <input type="text" id="search-name" placeholder="按名称搜索">
+          <select id="filter-room">
+            <option value="">全部房间</option>
+          </select>
+          <select id="filter-expiry">
+            <option value="">全部</option>
+            <option value="expired">已过期</option>
+            <option value="soon">7天内到期</option>
+            <option value="ok">正常</option>
+          </select>
+          <button type="button" class="btn btn-primary" id="btn-search"><i class="fas fa-search"></i> 搜索</button>
+        </div>
+        <ul id="item-list" class="item-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // ========== 存储键与工具 ==========
+    const STORAGE_ITEMS = 'shiwuji_items';
+    const STORAGE_LAYOUTS = 'shiwuji_layouts';
+    const STORAGE_ROOMS = 'shiwuji_rooms';
+
+    function uuid() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/x/g, () => (Math.random() * 16 | 0).toString(16));
+    }
+
+    function getItems() {
+      try {
+        const raw = localStorage.getItem(STORAGE_ITEMS);
+        return raw ? JSON.parse(raw) : [];
+      } catch (e) { return []; }
+    }
+
+    function setItems(items) {
+      localStorage.setItem(STORAGE_ITEMS, JSON.stringify(items));
+    }
+
+    function getLayouts() {
+      try {
+        const raw = localStorage.getItem(STORAGE_LAYOUTS);
+        return raw ? JSON.parse(raw) : {};
+      } catch (e) { return {}; }
+    }
+
+    function setLayouts(layouts) {
+      localStorage.setItem(STORAGE_LAYOUTS, JSON.stringify(layouts));
+    }
+
+    function getRooms() {
+      try {
+        const raw = localStorage.getItem(STORAGE_ROOMS);
+        return raw ? JSON.parse(raw) : ['客厅', '卧室', '厨房', '阳台'];
+      } catch (e) { return ['客厅', '卧室', '厨房', '阳台']; }
+    }
+
+    function setRooms(rooms) {
+      localStorage.setItem(STORAGE_ROOMS, JSON.stringify(rooms));
+    }
+
+    function showToast(msg, type = 'success') {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast ' + type + ' show';
+      setTimeout(() => el.classList.remove('show'), 2500);
+    }
+
+    // ========== 路由与视图 ==========
+    const views = ['view-home', 'view-register', 'view-scan', 'view-detail', 'view-storage', 'view-list'];
+
+    function showView(viewId) {
+      views.forEach(id => {
+        document.getElementById(id).classList.toggle('active', id === viewId);
+      });
+    }
+
+    function route() {
+      const hash = window.location.hash.slice(1) || 'home';
+      const [page, param] = hash.split('?');
+      if (page !== 'scan') stopScan();
+      if (page === 'home') {
+        showView('view-home');
+        renderHome();
+      } else if (page === 'register') {
+        showView('view-register');
+        const editId = new URLSearchParams(param || '').get('edit');
+        initRegister(editId || null);
+      } else if (page === 'scan') {
+        showView('view-scan');
+        initScan();
+      } else if (page === 'detail') {
+        showView('view-detail');
+        const id = new URLSearchParams(param || '').get('id');
+        renderDetail(id);
+      } else if (page === 'storage') {
+        showView('view-storage');
+        renderStorage();
+      } else if (page === 'list') {
+        showView('view-list');
+        renderList();
+      } else {
+        showView('view-home');
+        renderHome();
+      }
+    }
+
+    window.addEventListener('hashchange', route);
+    window.addEventListener('load', route);
+
+    // ========== 首页 ==========
+    function getExpiringItems() {
+      const items = getItems();
+      const now = new Date();
+      const in7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      return items
+        .filter(item => item.expiryDate) // 有保质期的才参与
+        .map(item => {
+          const exp = new Date(item.expiryDate);
+          const days = Math.ceil((exp - now) / (24 * 60 * 60 * 1000));
+          return { ...item, days };
+        })
+        .filter(item => item.days <= 7)
+        .sort((a, b) => a.days - b.days);
+    }
+
+    function renderHome() {
+      const expiring = getExpiringItems();
+      const listEl = document.getElementById('expiring-list');
+      const emptyEl = document.getElementById('expiring-empty');
+      listEl.innerHTML = '';
+      if (expiring.length === 0) {
+        emptyEl.style.display = 'block';
+        return;
+      }
+      emptyEl.style.display = 'none';
+      expiring.forEach(item => {
+        const li = document.createElement('li');
+        const daysClass = item.days < 0 ? 'days overdue' : 'days';
+        const daysText = item.days < 0 ? `已过期 ${-item.days} 天` : `剩余 ${item.days} 天`;
+        li.innerHTML = `<span>${escapeHtml(item.name)}</span><span class="${daysClass}">${daysText}</span>`;
+        li.onclick = () => location.hash = '#detail?id=' + item.id;
+        listEl.appendChild(li);
+      });
+
+      const items = getItems();
+      const roomCount = {};
+      items.forEach(item => {
+        const room = item.location || '未分类';
+        roomCount[room] = (roomCount[room] || 0) + 1;
+      });
+      const statsEl = document.getElementById('room-stats');
+      statsEl.innerHTML = Object.entries(roomCount).map(([room, n]) =>
+        `<div class="room-stat">${escapeHtml(room)}：<span>${n}</span> 件</div>`
+      ).join('') || '<span style="color: var(--text-muted);">暂无物品数据</span>';
+    }
+
+    // ========== 物品建档（支持编辑：?edit=id） ==========
+    function initRegister(editId) {
+      const select = document.getElementById('register-location');
+      const rooms = getRooms();
+      select.innerHTML = '<option value="">请选择或下方自定义</option>' +
+        rooms.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+
+      const form = document.getElementById('form-register');
+      const qrResult = document.getElementById('qr-result');
+      const submitBtn = document.getElementById('btn-register-submit');
+      qrResult.style.display = 'none';
+      form.reset();
+      document.getElementById('photo-preview').style.display = 'none';
+      document.getElementById('photo-preview').src = '';
+
+      if (editId) {
+        const items = getItems();
+        const item = items.find(i => i.id === editId);
+        if (item) {
+          form.name.value = item.name || '';
+          form.purchaseDate.value = item.purchaseDate || '';
+          form.expiryDate.value = item.expiryDate || '';
+          form.location.value = item.location || '';
+          form.locationCustom.value = '';
+          form.roomArea.value = item.roomArea || '';
+          form.note.value = item.note || '';
+          if (item.imageBase64) {
+            const img = document.getElementById('photo-preview');
+            img.src = item.imageBase64;
+            img.style.display = 'block';
+          }
+        }
+        submitBtn.innerHTML = '<i class="fas fa-save"></i> 更新物品';
+      } else {
+        submitBtn.innerHTML = '<i class="fas fa-save"></i> 保存并生成二维码';
+      }
+
+      document.getElementById('photo-input').onchange = function () {
+        const file = this.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+          const img = document.getElementById('photo-preview');
+          img.src = e.target.result;
+          img.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      };
+
+      form.onsubmit = function (e) {
+        e.preventDefault();
+        const locationCustom = (form.locationCustom && form.locationCustom.value || '').trim();
+        const location = locationCustom || (form.location && form.location.value) || '未分类';
+        if (locationCustom) {
+          const roomList = getRooms();
+          if (!roomList.includes(locationCustom)) setRooms([...roomList, locationCustom]);
+        }
+
+        const items = getItems();
+        const img = document.getElementById('photo-preview');
+        const isEdit = !!editId;
+        let item = isEdit ? items.find(i => i.id === editId) : null;
+        if (!item) {
+          item = {
+            id: uuid(),
+            name: '',
+            purchaseDate: '',
+            expiryDate: '',
+            location: '',
+            roomArea: '',
+            note: '',
+            imageBase64: '',
+            createdAt: new Date().toISOString()
+          };
+        }
+
+        item.name = (form.name && form.name.value) || '';
+        item.purchaseDate = (form.purchaseDate && form.purchaseDate.value) || '';
+        item.expiryDate = (form.expiryDate && form.expiryDate.value) || '';
+        item.location = location;
+        item.roomArea = (form.roomArea && form.roomArea.value) || '';
+        item.note = (form.note && form.note.value) || '';
+        if (img && img.src && img.src.startsWith('data:')) item.imageBase64 = img.src;
+
+        if (isEdit) {
+          const idx = items.findIndex(i => i.id === editId);
+          if (idx >= 0) items[idx] = item;
+        } else {
+          items.push(item);
+        }
+        setItems(items);
+
+        const layouts = getLayouts();
+        if (!layouts[location]) layouts[location] = { room: location, areas: [] };
+        const areaName = item.roomArea || '默认区';
+        let area = layouts[location].areas.find(a => a.name === areaName);
+        if (!area) {
+          area = { name: areaName, items: [] };
+          layouts[location].areas.push(area);
+        }
+        if (!area.items.includes(item.id)) area.items.push(item.id);
+        setLayouts(layouts);
+
+        showToast(isEdit ? '更新成功' : '保存成功');
+
+        if (!isEdit && typeof QRCode !== 'undefined') {
+          const qrPayload = JSON.stringify({ id: item.id, name: item.name, location });
+          QRCode.toDataURL(qrPayload, { width: 200, margin: 1 }, (err, url) => {
+            if (err) { showToast('二维码生成失败', 'error'); return; }
+            document.getElementById('qr-image').src = url;
+            document.getElementById('qr-download').href = url;
+            qrResult.style.display = 'block';
+          });
+        } else if (!isEdit) {
+          qrResult.style.display = 'block';
+          document.getElementById('qr-image').src = '';
+          document.getElementById('qr-download').href = '#';
+        } else {
+          location.hash = '#detail?id=' + encodeURIComponent(item.id);
+        }
+      };
+    }
+
+    // ========== 扫码溯源 ==========
+    let scanStream = null;
+    let scanAnimationId = null;
+
+    function initScan() {
+      stopScan();
+      document.getElementById('manual-id').value = '';
+      document.getElementById('btn-lookup').onclick = () => {
+        const id = document.getElementById('manual-id').value.trim();
+        if (!id) { showToast('请输入物品ID', 'error'); return; }
+        location.hash = '#detail?id=' + encodeURIComponent(id);
+      };
+
+      const btnCam = document.getElementById('btn-toggle-cam');
+      btnCam.onclick = function () {
+        if (scanStream) {
+          stopScan();
+          btnCam.textContent = '开启摄像头';
+          return;
+        }
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+          .then(stream => {
+            scanStream = stream;
+            const video = document.getElementById('scan-video');
+            video.srcObject = stream;
+            video.play();
+            btnCam.textContent = '关闭摄像头';
+            tickScan();
+          })
+          .catch(() => showToast('无法使用摄像头', 'error'));
+      };
+    }
+
+    function stopScan() {
+      if (scanAnimationId) cancelAnimationFrame(scanAnimationId);
+      scanAnimationId = null;
+      if (scanStream) {
+        scanStream.getTracks().forEach(t => t.stop());
+        scanStream = null;
+      }
+      const video = document.getElementById('scan-video');
+      if (video) video.srcObject = null;
+    }
+
+    function tickScan() {
+      const video = document.getElementById('scan-video');
+      const canvas = document.getElementById('scan-canvas');
+      const ctx = canvas.getContext('2d');
+      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA || !scanStream) {
+        scanAnimationId = requestAnimationFrame(tickScan);
+        return;
+      }
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      if (typeof jsQR !== 'undefined') {
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        if (code && code.data) {
+          try {
+            const data = JSON.parse(code.data);
+            if (data.id) {
+              stopScan();
+              showToast('扫码成功');
+              location.hash = '#detail?id=' + encodeURIComponent(data.id);
+              return;
+            }
+          } catch (e) {
+            if (code.data) {
+              stopScan();
+              location.hash = '#detail?id=' + encodeURIComponent(code.data);
+              return;
+            }
+          }
+        }
+      }
+      scanAnimationId = requestAnimationFrame(tickScan);
+    }
+
+    // ========== 物品详情 ==========
+    function renderDetail(id) {
+      const card = document.getElementById('detail-card');
+      const notFound = document.getElementById('detail-not-found');
+      const photo = document.getElementById('detail-photo');
+      const body = document.getElementById('detail-body');
+
+      if (!id) {
+        card.style.display = 'none';
+        notFound.style.display = 'block';
+        return;
+      }
+
+      const items = getItems();
+      const item = items.find(i => i.id === id);
+      if (!item) {
+        card.style.display = 'none';
+        notFound.style.display = 'block';
+        return;
+      }
+
+      card.style.display = 'block';
+      notFound.style.display = 'none';
+
+      if (item.imageBase64) {
+        photo.src = item.imageBase64;
+        photo.style.display = 'block';
+      } else {
+        photo.style.display = 'none';
+      }
+
+      const now = new Date();
+      const hasExpiry = !!item.expiryDate;
+      const isExpired = hasExpiry && new Date(item.expiryDate) < now;
+      const expiryClass = isExpired ? 'text-danger' : '';
+      const expiryText = item.expiryDate
+        ? (isExpired ? `已过期（${item.expiryDate}）` : `有效期至 ${item.expiryDate}`)
+        : '无';
+
+      body.innerHTML = `
+        <div class="detail-row"><strong>名称</strong> ${escapeHtml(item.name)}</div>
+        <div class="detail-row"><strong>购买日期</strong> ${item.purchaseDate || '-'}</div>
+        <div class="detail-row ${expiryClass}"><strong>保质期</strong> ${expiryText}</div>
+        <div class="detail-row"><strong>存放位置</strong> ${escapeHtml(item.location || '-')}</div>
+        <div class="detail-row"><strong>收纳区域</strong> ${escapeHtml(item.roomArea || '-')}</div>
+        <div class="detail-row"><strong>备注</strong> ${escapeHtml(item.note || '-')}</div>
+      `;
+
+      document.getElementById('btn-edit').onclick = () => {
+        location.hash = '#register?edit=' + encodeURIComponent(item.id);
+      };
+      document.getElementById('btn-share-link').onclick = () => {
+        const url = window.location.origin + window.location.pathname + '#detail?id=' + encodeURIComponent(item.id);
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(() => showToast('链接已复制到剪贴板')).catch(() => fallbackCopy(url));
+        } else {
+          fallbackCopy(url);
+        }
+      };
+      function fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast('链接已复制到剪贴板');
+        } catch (e) {
+          showToast('复制失败，请手动复制地址栏链接', 'error');
+        }
+        document.body.removeChild(ta);
+      }
+      document.getElementById('btn-delete').onclick = () => {
+        if (!confirm('确定删除该物品吗？')) return;
+        const newItems = getItems().filter(i => i.id !== id);
+        setItems(newItems);
+        const layouts = getLayouts();
+        Object.keys(layouts).forEach(room => {
+          layouts[room].areas.forEach(area => {
+            area.items = area.items.filter(i => i !== id);
+          });
+        });
+        setLayouts(layouts);
+        showToast('已删除');
+        location.hash = '#home';
+      };
+    }
+
+    // ========== 收纳规划 ==========
+    let currentStorageRoom = null;
+
+    function renderStorage() {
+      const rooms = getRooms();
+      const listEl = document.getElementById('room-list');
+      listEl.innerHTML = rooms.map(room => {
+        const isActive = room === currentStorageRoom ? ' active' : '';
+        return `<li class="${isActive}" data-room="${escapeHtml(room)}">
+          <span>${escapeHtml(room)}</span>
+          <button type="button" class="btn-delete-room" data-room="${escapeHtml(room)}" title="删除房间"><i class="fas fa-times"></i></button>
+        </li>`;
+      }).join('');
+
+      listEl.querySelectorAll('li').forEach(li => {
+        const roomName = li.dataset.room;
+        li.onclick = (ev) => {
+          if (ev.target.closest('.btn-delete-room')) return;
+          currentStorageRoom = roomName;
+          renderStorage();
+          renderStorageGrid(currentStorageRoom);
+        };
+        const delBtn = li.querySelector('.btn-delete-room');
+        if (delBtn) {
+          delBtn.onclick = (ev) => {
+            ev.stopPropagation();
+            if (!confirm('删除房间后，该房间下的物品将归为「未分类」。确定删除？')) return;
+            const newRooms = getRooms().filter(r => r !== roomName);
+            setRooms(newRooms);
+            const items = getItems();
+            items.forEach(it => { if (it.location === roomName) it.location = '未分类'; });
+            setItems(items);
+            const layouts = getLayouts();
+            delete layouts[roomName];
+            setLayouts(layouts);
+            currentStorageRoom = newRooms[0] || null;
+            renderStorage();
+            showToast('已删除房间');
+          };
+        }
+      });
+
+      document.getElementById('new-room-name').value = '';
+      document.getElementById('btn-add-room').onclick = () => {
+        const name = document.getElementById('new-room-name').value.trim();
+        if (!name) { showToast('请输入房间名', 'error'); return; }
+        if (rooms.includes(name)) { showToast('房间已存在', 'error'); return; }
+        setRooms([...rooms, name]);
+        currentStorageRoom = name;
+        renderStorage();
+        renderStorageGrid(name);
+        showToast('已添加房间');
+      };
+
+      if (!currentStorageRoom && rooms.length) currentStorageRoom = rooms[0];
+      renderStorageGrid(currentStorageRoom);
+    }
+
+    function renderStorageGrid(room) {
+      const grid = document.getElementById('storage-grid');
+      if (!room) {
+        grid.innerHTML = '<p style="color: var(--text-muted);">请先选择或添加房间</p>';
+        return;
+      }
+      const layouts = getLayouts();
+      let layout = layouts[room];
+      if (!layout) layout = { room, areas: [] };
+
+      const items = getItems();
+      grid.innerHTML = layout.areas.map(area => {
+        const count = (area.items || []).length;
+        const names = (area.items || [])
+          .map(id => items.find(i => i.id === id))
+          .filter(Boolean)
+          .slice(0, 3)
+          .map(i => i.name)
+          .join('、');
+        return `
+          <div class="grid-cell" data-area="${escapeHtml(area.name)}">
+            <div class="area-name">${escapeHtml(area.name)}</div>
+            <div class="area-items">${count} 件${names ? ' · ' + escapeHtml(names) : ''}</div>
+          </div>`;
+      }).join('') || '<p style="color: var(--text-muted); grid-column: 1/-1;">该房间暂无收纳区域，在「物品建档」中为物品设置存放位置与收纳区域后会自动出现</p>';
+    }
+
+    // ========== 物品列表/搜索 ==========
+    function renderList() {
+      const rooms = getRooms();
+      const select = document.getElementById('filter-room');
+      select.innerHTML = '<option value="">全部房间</option>' +
+        rooms.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+
+      document.getElementById('btn-search').onclick = applyListFilter;
+      document.getElementById('search-name').onkeydown = e => { if (e.key === 'Enter') applyListFilter(); };
+
+      applyListFilter();
+    }
+
+    function applyListFilter() {
+      const name = (document.getElementById('search-name') && document.getElementById('search-name').value || '').trim().toLowerCase();
+      const room = (document.getElementById('filter-room') && document.getElementById('filter-room').value) || '';
+      const expiry = (document.getElementById('filter-expiry') && document.getElementById('filter-expiry').value) || '';
+      const now = new Date();
+      const in7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+      let list = getItems();
+      if (name) list = list.filter(i => (i.name || '').toLowerCase().includes(name));
+      if (room) list = list.filter(i => i.location === room);
+      if (expiry === 'expired') list = list.filter(i => i.expiryDate && new Date(i.expiryDate) < now);
+      if (expiry === 'soon') list = list.filter(i => i.expiryDate && new Date(i.expiryDate) >= now && new Date(i.expiryDate) <= in7);
+      if (expiry === 'ok') list = list.filter(i => !i.expiryDate || new Date(i.expiryDate) > in7);
+
+      const ul = document.getElementById('item-list');
+      ul.innerHTML = list.map(item => {
+        const exp = item.expiryDate ? new Date(item.expiryDate) : null;
+        const isExpired = exp && exp < now;
+        const thumb = item.imageBase64
+          ? `<img class="item-thumb" src="${item.imageBase64}" alt="">`
+          : '<div class="item-thumb" style="display:flex;align-items:center;justify-content:center;font-size:1.2rem;color:var(--text-muted);"><i class="fas fa-box"></i></div>';
+        const meta = [item.location, item.expiryDate && (isExpired ? '已过期' : '有效期 ' + item.expiryDate)].filter(Boolean).join(' · ');
+        return `<li data-item-id="${escapeHtml(item.id)}">
+          ${thumb}
+          <div class="item-info">
+            <div class="item-name">${escapeHtml(item.name)} ${isExpired ? '<span class="text-danger">(已过期)</span>' : ''}</div>
+            <div class="item-meta">${escapeHtml(meta)}</div>
+          </div>
+          <i class="fas fa-chevron-right" style="color: var(--text-muted);"></i>
+        </li>`;
+      }).join('');
+
+      ul.querySelectorAll('li').forEach(li => {
+        li.onclick = () => { location.hash = '#detail?id=' + encodeURIComponent(li.dataset.itemId); };
+      });
+    }
+
+    function escapeHtml(str) {
+      if (str == null) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
